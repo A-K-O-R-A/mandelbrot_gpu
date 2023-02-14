@@ -62,9 +62,38 @@ fn vs_main(
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
-    return vec4<f32>(0.3, 0.5, 0.1, 1.0);
+    let uv: vec2<f32> = in.vert_pos.xy;
+
+    let iter: u32 = mandelbrot(uv);
+
+    let p: f32 = 1. / (pow(f32(iter), 0.5) + 1.);
+    
+    let col = vec3<f32>(p, p,p);
+
+    //let col = (in.vert_pos + vec3<f32>(1.0,1.0,1.0)) / 2.0;
+
+    return vec4<f32>(col.xyz, 1.0);
 }
 
+ 
+const RADIUS: f32 = 2.0;
+const MAX_ITERATION: u32 = 100u;
+
+fn mandelbrot(pos: vec2<f32>) -> u32 {
+       let p0: vec2<f32> = pos - vec2<f32>(0.5, 0.5);
+
+       var p: vec2<f32> = vec2<f32>(0.0, 0.0);
+       var iteration: u32 = 0u;
+
+        while (dot(p, p) <= (RADIUS * RADIUS) && (iteration < MAX_ITERATION)) {
+            let xtemp: f32 = p.x * p.x - p.y * p.y + p0.x;
+            p.y = 2. * p.x * p.y + p0.y;
+            p.x = xtemp;
+            iteration += 1u;
+        }
+        
+        return iteration;
+}
  
 
  
