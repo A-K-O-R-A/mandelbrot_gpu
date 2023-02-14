@@ -15,6 +15,7 @@ struct State {
     size: winit::dpi::PhysicalSize<u32>,
     window: Window,
     render_pipeline: wgpu::RenderPipeline,
+    #[allow(dead_code)]
     clear_color: wgpu::Color,
 }
 
@@ -183,6 +184,7 @@ impl State {
         }
     }
 
+    #[allow(dead_code)]
     fn input(&mut self, event: &WindowEvent) -> bool {
         match event {
             WindowEvent::CursorMoved {
@@ -275,7 +277,7 @@ impl State {
 
             // NEW!
             render_pass.set_pipeline(&self.render_pipeline); // 2.
-            render_pass.draw(0..5, 0..1); // 3.
+            render_pass.draw(0..6, 0..1); // 3.
         }
 
         // submit will accept anything that implements IntoIter
