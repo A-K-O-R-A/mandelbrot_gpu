@@ -1,5 +1,5 @@
-use tutorial1_window::run;
+use gpu_test::run;
 
 fn main() {
-    run();
+    pollster::block_on(run());
 }
