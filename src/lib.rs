@@ -38,12 +38,10 @@ struct ViewUniform {
     dpi: f32,
     radius: f32,
     max_iterations: u32,
-    /// Point at the bottom left point of the screen
-    // bot_left: [f32; 2],
-    /// Vector pointing to the top right of the screen
-    // screen_vec: [f32; 2],
+    // Bottom left corner
     min_x: f32,
     min_y: f32,
+    // Top right corner
     max_x: f32,
     max_y: f32,
 }
@@ -129,16 +127,6 @@ impl State {
         // The surface needs to live as long as the window that created it.
         // State owns the window so this should be safe.
         let surface = unsafe { instance.create_surface(&window) }.unwrap();
-
-        instance
-            .enumerate_adapters(wgpu::Backends::all())
-            .filter(|adapter| {
-                // Check if this adapter supports our surface
-                adapter.is_surface_supported(&surface)
-            })
-            .for_each(|a| {
-                println!("{:?}", a.get_info());
-            });
 
         let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
@@ -305,12 +293,13 @@ impl State {
             return;
         }
 
-        // exp. (0.9, 1.1)
+        // Calculate relative scale like (0.9, 1.1)
         let scale = (
             new_size.width as f32 / self.size.width as f32,
             new_size.height as f32 / self.size.height as f32,
         );
 
+        // Resize the viewing coordinates
         self.view.uniform.transform(scale);
 
         // Resize window
@@ -327,6 +316,7 @@ impl State {
                     return  false;
                 };
 
+                // The speed at which the user pans with the keys
                 const SPEED: f32 = 0.02;
                 let range_sizes = self.view.uniform.range_sizes();
 
@@ -338,12 +328,12 @@ impl State {
                     // Change iterations
                     VirtualKeyCode::Comma => {
                         if self.view.uniform.max_iterations > 100 {
-                            self.view.uniform.max_iterations /= 10;
+                            self.view.uniform.max_iterations -= 10;
                         }
                     }
                     VirtualKeyCode::Period => {
                         if self.view.uniform.max_iterations < u32::MAX / 10 {
-                            self.view.uniform.max_iterations *= 10;
+                            self.view.uniform.max_iterations += 100;
                         }
                     }
                     // Change radius
@@ -382,6 +372,7 @@ impl State {
                 self.view.mouse_delta = delta;
                 self.view.mouse_pos = new_pos;
 
+                // User drags the mouse
                 if self.view.mouse_pressed {
                     let logical_delta = (
                         delta.0 as f32 / self.size.width as f32,
@@ -389,6 +380,7 @@ impl State {
                     );
 
                     let range_sizes = self.view.uniform.range_sizes();
+
                     let scaled_delta = (
                         -logical_delta.0 * range_sizes.0, //Negative because otherwise it's inverted
                         logical_delta.1 * range_sizes.1,
@@ -401,7 +393,9 @@ impl State {
                 // Drag canvas
                 match button {
                     MouseButton::Left => match state {
+                        // User started dragging
                         ElementState::Pressed => self.view.mouse_pressed = true,
+                        // User stopped dragging
                         ElementState::Released => self.view.mouse_pressed = false,
                     },
                     _ => {}
@@ -409,7 +403,7 @@ impl State {
             }
             WindowEvent::MouseWheel { delta, .. } => match delta {
                 MouseScrollDelta::PixelDelta(_delta) => {
-                    todo!("Scrolled pixel");
+                    // Dragging with touchpads is ignored
                 }
                 MouseScrollDelta::LineDelta(_x, y) => {
                     let fact = (-y * 0.1) + 1.;
@@ -423,6 +417,7 @@ impl State {
     }
 
     fn update(&mut self) {
+        // Updates the uniform buffer to let the GPU know are updated values of the ViewUniform
         self.queue.write_buffer(
             &self.view.buffer,
             0,
@@ -444,6 +439,7 @@ impl State {
             });
 
         {
+            // Create render pass with a background color
             let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("Render Pass"),
                 color_attachments: &[
@@ -465,9 +461,9 @@ impl State {
                 depth_stencil_attachment: None,
             });
 
-            render_pass.set_pipeline(&self.render_pipeline); // 2.
+            render_pass.set_pipeline(&self.render_pipeline);
             render_pass.set_bind_group(0, &self.view.bind_group, &[]);
-            render_pass.draw(0..6, 0..1); // 3.
+            render_pass.draw(0..6, 0..1);
         }
 
         // submit will accept anything that implements IntoIter
@@ -479,9 +475,26 @@ impl State {
 }
 
 pub async fn run() {
+    println!("The following Keybindings are available:");
+    let help = r"
+    R - Reset everything
+    
+    , - decrease Iterations (-100)        K - decrease Radius (-0.1)
+    . - increase Iterations (+100)        L - increase Radius (+0.1)
+
+    You can move with W/A/S/D, the arrow keys or by dragging with the mouse.
+
+    Use the mouse wheel to zoom into or out of the center of the canvas.
+    ";
+    println!("{help}");
+    println!("For debug info set the RUST_LOG environment variable to info/warn/error");
+
     env_logger::init();
     let event_loop = EventLoop::new();
-    let window = WindowBuilder::new().build(&event_loop).unwrap();
+    let window = WindowBuilder::new()
+        .with_title("Mandelbrot renderer")
+        .build(&event_loop)
+        .unwrap();
 
     let mut state = State::new(window).await;
 

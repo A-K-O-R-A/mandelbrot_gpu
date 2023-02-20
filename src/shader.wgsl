@@ -74,7 +74,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 
     let iter: u32 = mandelbrot(uv);
 
-    let p: f32 = 1. / (pow(f32(iter), 0.7) + 1.);
+    let p: f32 = 1. / (pow(f32(iter), 0.27) + 1.);
     
     let col = vec3<f32>(p, .1 , .1);
 
@@ -83,9 +83,6 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     return vec4<f32>(col.xyz, 1.0);
 }
 
- 
-// const RADIUS: f32 = 2.0;
-// const MAX_ITERATION: u32 = 1000u;
 
 fn project_cords(pos: vec2<f32>) -> vec2<f32> {
     // Ranges from 0-1
@@ -119,3 +116,4 @@ fn mandelbrot(pos: vec2<f32>) -> u32 {
         
     return iteration;
 }
+ 
