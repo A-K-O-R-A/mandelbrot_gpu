@@ -2,6 +2,11 @@
 name = "gpu_test"
 version = "0.1.0"
 edition = "2021"
+authors = ["AKORA"]
+description = "A simple mandelbrot renderer using the wgpu crate"
+readme = "./README.md"
+publish = false
+repository = "https://github.com/A-K-O-R-A/gpu_test"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
