@@ -68,18 +68,11 @@ impl ViewUniform {
         }
     }
 
-    pub fn update(&mut self, min: Pos2, max: Pos2) {
-        /*
-        println!(
-            "N a: ({:.2}|{:.2}) b: ({:.2}|{:.2})",
-            min.0, min.1, max.0, max.1
-        );
-         */
-
-        self.min_x = min.0;
-        self.min_y = min.1;
-        self.max_x = max.0;
-        self.max_y = max.1;
+    pub fn update(&mut self, a: Pos2, b: Pos2) {
+        self.min_x = a.0;
+        self.min_y = a.1;
+        self.max_x = b.0;
+        self.max_y = b.1;
     }
 
     /// Returns ( (x_min, y_min), (x_max, y_max))
@@ -94,36 +87,28 @@ impl ViewUniform {
         self.update(new_a, new_b);
     }
 
+    pub fn transform(&mut self, scale: (f32, f32)) {
+        let old_range_sizes = self.range_sizes();
+        // Calculate new coordinate ranges
+        // Scale coordinate ranges according to the resizing of the window
+        let new_range_sizes = (old_range_sizes.0 * scale.0, old_range_sizes.1 * scale.1);
+        // The removed or added amount of coordinates
+        let range_diffs = (
+            old_range_sizes.0 - new_range_sizes.0,
+            old_range_sizes.1 - new_range_sizes.1,
+        );
+
+        let (old_a, old_b) = self.corners();
+        // "range_diffs.0 / 2" to keep the figure centered
+        let new_a = (old_a.0 + range_diffs.0 / 2., old_a.1 + range_diffs.1 / 2.);
+        let new_b = (old_b.0 - range_diffs.0 / 2., old_b.1 - range_diffs.1 / 2.);
+
+        self.update(new_a, new_b);
+    }
+
     /// Returns (xRange Size, yRange Size)
     pub fn range_sizes(&self) -> (f32, f32) {
         (self.max_x - self.min_x, self.max_y - self.min_y)
-    }
-
-    pub fn cutout_to_range(&self, min: Pos2, max: Pos2) -> (Pos2, Pos2) {
-        let (x_min, x_max) = (self.min_x, self.max_x);
-        let (y_min, y_max) = (self.min_y, self.max_y);
-
-        //Translate to possititve only
-        let x_trans = if x_min > 0. { x_min } else { -x_min };
-        let y_trans = if y_min > 0. { y_min } else { -y_min };
-
-        let _t_x_min = 0;
-        let t_x_max = x_max + x_trans;
-
-        let _t_y_min = 0;
-        let t_y_max = y_max + y_trans;
-
-        let new_t_x_min = t_x_max * (min.0);
-        let new_t_x_max = t_x_max * (max.0);
-
-        //Switch bottom anmd top bcs weird coordinatze system from library
-        let new_t_y_min = t_y_max * (max.1);
-        let new_t_y_max = t_y_max * (min.1);
-
-        let new_x_range = (new_t_x_min - x_trans, new_t_x_max - x_trans);
-        let new_y_range = (new_t_y_min - y_trans, new_t_y_max - y_trans);
-
-        (new_x_range, new_y_range)
     }
 }
 
@@ -326,41 +311,13 @@ impl State {
             new_size.height as f32 / self.size.height as f32,
         );
 
-        let old_range_sizes = self.view.uniform.range_sizes();
-        // Calculate new coordinate ranges
-        // Scale coordinate ranges according to the resizing of the window
-        let new_range_sizes = (old_range_sizes.0 * scale.0, old_range_sizes.1 * scale.1);
-        // The removed or added amount of coordinates
-        let range_diffs = (
-            old_range_sizes.0 - new_range_sizes.0,
-            old_range_sizes.1 - new_range_sizes.1,
-        );
-
-        let (old_a, old_b) = self.view.uniform.corners();
-        // "range_diffs.0 / 2" to keep the figure centered
-        let new_a = (old_a.0 + range_diffs.0 / 2., old_a.1 + range_diffs.1 / 2.);
-        let new_b = (old_b.0 - range_diffs.0 / 2., old_b.1 - range_diffs.1 / 2.);
-
-        self.view.uniform.update(new_a, new_b);
+        self.view.uniform.transform(scale);
 
         // Resize window
         self.size = new_size;
         self.config.width = new_size.width;
         self.config.height = new_size.height;
         self.surface.configure(&self.device, &self.config);
-    }
-
-    fn project_cords(&self, pos: Pos2) -> Pos2 {
-        // Ranges from 0-1
-        let x_size = self.view.uniform.max_x - self.view.uniform.min_x;
-        let y_size = self.view.uniform.max_y - self.view.uniform.min_y;
-        let size = (x_size, y_size);
-
-        let off = (self.view.uniform.min_x, self.view.uniform.min_y);
-
-        let proj = ((pos.1 * size.0) + off.0, (pos.1 * size.1) + off.1);
-
-        return proj;
     }
 
     fn input(&mut self, event: &WindowEvent) -> bool {
@@ -370,9 +327,24 @@ impl State {
                     return  false;
                 };
 
+                const SPEED: f32 = 0.02;
+                let range_sizes = self.view.uniform.range_sizes();
+
                 match key {
                     VirtualKeyCode::R => {
                         self.view.uniform = ViewUniform::new();
+                    }
+                    VirtualKeyCode::Left | VirtualKeyCode::A => {
+                        self.view.uniform.translate((-range_sizes.0 * SPEED, 0.))
+                    }
+                    VirtualKeyCode::Right | VirtualKeyCode::D => {
+                        self.view.uniform.translate((range_sizes.0 * SPEED, 0.))
+                    }
+                    VirtualKeyCode::Up | VirtualKeyCode::W => {
+                        self.view.uniform.translate((0., range_sizes.1 * SPEED))
+                    }
+                    VirtualKeyCode::Down | VirtualKeyCode::S => {
+                        self.view.uniform.translate((0., -range_sizes.1 * SPEED))
                     }
                     _ => {}
                 }
@@ -416,35 +388,8 @@ impl State {
                     todo!("Scrolled pixel");
                 }
                 MouseScrollDelta::LineDelta(_x, y) => {
-                    //println!("{y}");
-                    let fact = (y * 0.02) + 1.;
-
-                    let m_pos = self.view.mouse_pos;
-                    let m_pos = (
-                        m_pos.x as f32 / self.size.width as f32,
-                        m_pos.y as f32 / self.size.height as f32,
-                    );
-
-                    println!("{:.2} | {:.2}", m_pos.0, m_pos.1);
-
-                    // offset
-                    let new_min = (m_pos.0 - 0.5, m_pos.1 - 0.5);
-                    let new_max = (m_pos.0 + 0.5, m_pos.1 + 0.5);
-                    println!("Min {:.2} | {:.2}", new_min.0, new_min.1);
-                    println!("Max {:.2} | {:.2}", new_max.0, new_max.1);
-
-                    /*
-                    //project
-                    let new_min = self.project_cords(new_min);
-                    let new_max = self.project_cords(new_max);
-                    */
-
-                    let new_min = (0., 0.);
-                    let new_max = (1., 1.);
-
-                    let (new_min, new_max) = self.view.uniform.cutout_to_range(new_min, new_max);
-
-                    self.view.uniform.update(new_min, new_max);
+                    let fact = (-y * 0.1) + 1.;
+                    self.view.uniform.transform((fact, fact));
                 }
             },
             _ => {}
