@@ -331,9 +331,33 @@ impl State {
                 let range_sizes = self.view.uniform.range_sizes();
 
                 match key {
+                    // Reset config
                     VirtualKeyCode::R => {
                         self.view.uniform = ViewUniform::new();
                     }
+                    // Change iterations
+                    VirtualKeyCode::Comma => {
+                        if self.view.uniform.max_iterations > 100 {
+                            self.view.uniform.max_iterations /= 10;
+                        }
+                    }
+                    VirtualKeyCode::Period => {
+                        if self.view.uniform.max_iterations < u32::MAX / 10 {
+                            self.view.uniform.max_iterations *= 10;
+                        }
+                    }
+                    // Change radius
+                    VirtualKeyCode::K => {
+                        if self.view.uniform.radius > 0.1 {
+                            self.view.uniform.radius -= 0.1;
+                        }
+                    }
+                    VirtualKeyCode::L => {
+                        if self.view.uniform.radius < 1000.0 {
+                            self.view.uniform.radius += 0.1;
+                        }
+                    }
+                    // Move
                     VirtualKeyCode::Left | VirtualKeyCode::A => {
                         self.view.uniform.translate((-range_sizes.0 * SPEED, 0.))
                     }
