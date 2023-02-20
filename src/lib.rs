@@ -1,6 +1,7 @@
 use log::info;
 use wgpu::util::DeviceExt;
 use winit::{
+    dpi::PhysicalPosition,
     event::*,
     event_loop::{ControlFlow, EventLoop},
     window::WindowBuilder,
@@ -16,11 +17,15 @@ struct State {
     size: winit::dpi::PhysicalSize<u32>,
     window: Window,
     render_pipeline: wgpu::RenderPipeline,
-    #[allow(dead_code)]
-    view_uniform: ViewUniform,
-    #[allow(dead_code)]
-    view_buffer: wgpu::Buffer,
-    view_bind_group: wgpu::BindGroup,
+    view: View,
+}
+
+#[derive(Debug)]
+struct View {
+    cursor_pos: PhysicalPosition<f64>,
+    uniform: ViewUniform,
+    buffer: wgpu::Buffer,
+    bind_group: wgpu::BindGroup,
 }
 
 // We need this for Rust to store our data correctly for the shaders
@@ -35,10 +40,10 @@ struct ViewUniform {
     // bot_left: [f32; 2],
     /// Vector pointing to the top right of the screen
     // screen_vec: [f32; 2],
-    x_min: f32,
-    x_max: f32,
-    y_min: f32,
-    y_max: f32,
+    min_x: f32,
+    min_y: f32,
+    max_x: f32,
+    max_y: f32,
 }
 
 impl ViewUniform {
@@ -52,11 +57,50 @@ impl ViewUniform {
             dpi: 500.,
             radius: 2.,
             max_iterations: 500,
-            x_min: x_r[0],
-            x_max: x_r[1],
-            y_min: y_r[0],
-            y_max: y_r[1],
+            min_x: x_r[0],
+            max_x: x_r[1],
+            min_y: y_r[0],
+            max_y: y_r[1],
         }
+    }
+
+    pub fn update(&mut self, min: (f32, f32), max: (f32, f32)) {
+        println!(
+            "N a: ({:.2}|{:.2}) b: ({:.2}|{:.2})",
+            min.0, min.1, max.0, max.1
+        );
+
+        self.min_x = min.0;
+        self.min_y = min.1;
+        self.max_x = max.0;
+        self.max_y = max.1;
+    }
+
+    pub fn cutout_to_range(&self, min: (f32, f32), max: (f32, f32)) -> ((f32, f32), (f32, f32)) {
+        let (x_min, x_max) = (self.min_x, self.max_x);
+        let (y_min, y_max) = (self.min_y, self.max_y);
+
+        //Translate to possititve only
+        let x_trans = if x_min > 0. { x_min } else { -x_min };
+        let y_trans = if y_min > 0. { y_min } else { -y_min };
+
+        let _t_x_min = 0;
+        let t_x_max = x_max + x_trans;
+
+        let _t_y_min = 0;
+        let t_y_max = y_max + y_trans;
+
+        let new_t_x_min = t_x_max * (min.0);
+        let new_t_x_max = t_x_max * (max.0);
+
+        //Switch bottom anmd top bcs weird coordinatze system from library
+        let new_t_y_min = t_y_max * (max.1);
+        let new_t_y_max = t_y_max * (min.1);
+
+        let new_x_range = (new_t_x_min - x_trans, new_t_x_max - x_trans);
+        let new_y_range = (new_t_y_min - y_trans, new_t_y_max - y_trans);
+
+        (new_x_range, new_y_range)
     }
 }
 
@@ -233,9 +277,12 @@ impl State {
             config,
             size,
             render_pipeline,
-            view_uniform,
-            view_buffer,
-            view_bind_group,
+            view: View {
+                cursor_pos: PhysicalPosition::new(0., 0.),
+                uniform: view_uniform,
+                buffer: view_buffer,
+                bind_group: view_bind_group,
+            },
         }
     }
 
@@ -258,10 +305,7 @@ impl State {
             let new_min = self.project_cords(new_min);
             let new_max = self.project_cords(new_max);
 
-            self.view_uniform.x_min = new_min.0;
-            self.view_uniform.y_min = new_min.1;
-            self.view_uniform.x_max = new_max.0;
-            self.view_uniform.y_max = new_max.1;
+            self.view.uniform.update(new_min, new_max);
 
             self.size = new_size;
             self.config.width = new_size.width;
@@ -272,11 +316,11 @@ impl State {
 
     fn project_cords(&self, pos: (f32, f32)) -> (f32, f32) {
         // Ranges from 0-1
-        let x_size = self.view_uniform.x_max - self.view_uniform.x_min;
-        let y_size = self.view_uniform.y_max - self.view_uniform.y_min;
+        let x_size = self.view.uniform.max_x - self.view.uniform.min_x;
+        let y_size = self.view.uniform.max_y - self.view.uniform.min_y;
         let size = (x_size, y_size);
 
-        let off = (self.view_uniform.x_min, self.view_uniform.y_min);
+        let off = (self.view.uniform.min_x, self.view.uniform.min_y);
 
         let proj = ((pos.1 * size.0) + off.0, (pos.1 * size.1) + off.1);
 
@@ -286,24 +330,55 @@ impl State {
     #[allow(dead_code)]
     fn input(&mut self, event: &WindowEvent) -> bool {
         match event {
+            WindowEvent::KeyboardInput { input, .. } => {
+                let Some(key) = input.virtual_keycode else {
+                    return  false;
+                };
+
+                match key {
+                    VirtualKeyCode::R => {
+                        self.view.uniform = ViewUniform::new();
+                    }
+                    _ => {}
+                }
+            }
+            WindowEvent::CursorMoved { position, .. } => {
+                self.view.cursor_pos = position.clone();
+            }
             WindowEvent::MouseWheel { delta, .. } => match delta {
                 MouseScrollDelta::PixelDelta(_delta) => {
-                    println!("Scrolled");
+                    todo!("Scrolled pixel");
                 }
-                MouseScrollDelta::LineDelta(x, y) => {
-                    let diff = y * 0.1;
+                MouseScrollDelta::LineDelta(_x, y) => {
+                    //println!("{y}");
+                    let fact = (y * 0.02) + 1.;
+
+                    let m_pos = self.view.cursor_pos;
+                    let m_pos = (
+                        m_pos.x as f32 / self.size.width as f32,
+                        m_pos.y as f32 / self.size.height as f32,
+                    );
+
+                    println!("{:.2} | {:.2}", m_pos.0, m_pos.1);
 
                     // offset
-                    let new_min = (diff, diff);
-                    let new_max = (1. - diff, 1. - diff);
+                    let new_min = (m_pos.0 - 0.5, m_pos.1 - 0.5);
+                    let new_max = (m_pos.0 + 0.5, m_pos.1 + 0.5);
+                    println!("Min {:.2} | {:.2}", new_min.0, new_min.1);
+                    println!("Max {:.2} | {:.2}", new_max.0, new_max.1);
+
+                    /*
                     //project
                     let new_min = self.project_cords(new_min);
                     let new_max = self.project_cords(new_max);
+                    */
 
-                    self.view_uniform.x_min = new_min.0;
-                    self.view_uniform.y_min = new_min.1;
-                    self.view_uniform.x_max = new_max.0;
-                    self.view_uniform.y_max = new_max.1;
+                    let new_min = (0., 0.);
+                    let new_max = (1., 1.);
+
+                    let (new_min, new_max) = self.view.uniform.cutout_to_range(new_min, new_max);
+
+                    self.view.uniform.update(new_min, new_max);
                 }
             },
             _ => {}
@@ -314,9 +389,9 @@ impl State {
 
     fn update(&mut self) {
         self.queue.write_buffer(
-            &self.view_buffer,
+            &self.view.buffer,
             0,
-            bytemuck::cast_slice(&[self.view_uniform]),
+            bytemuck::cast_slice(&[self.view.uniform]),
         );
     }
 
@@ -356,7 +431,7 @@ impl State {
             });
 
             render_pass.set_pipeline(&self.render_pipeline); // 2.
-            render_pass.set_bind_group(0, &self.view_bind_group, &[]);
+            render_pass.set_bind_group(0, &self.view.bind_group, &[]);
             render_pass.draw(0..6, 0..1); // 3.
         }
 
@@ -397,14 +472,9 @@ pub async fn run() {
                 // new_inner_size is &&mut so we have to dereference it twice
                 state.resize(**new_inner_size);
             }
-            WindowEvent::CursorMoved { .. } => {
-                // let _ = state.input(event);
-            }
-            WindowEvent::MouseWheel { .. } => {
+            _ => {
                 let _ = state.input(event);
             }
-
-            _ => {}
         },
         Event::RedrawRequested(window_id) if window_id == state.window().id() => {
             state.update();

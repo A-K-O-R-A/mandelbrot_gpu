@@ -60,8 +60,8 @@ struct ViewUniform {
     radius: f32,
     max_iterations: u32,
     x_min: f32,
-    x_max: f32,
     y_min: f32,
+    x_max: f32,
     y_max: f32,
 }
 
