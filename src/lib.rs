@@ -46,6 +46,8 @@ struct ViewUniform {
     max_y: f32,
 }
 
+type Pos2 = (f32, f32);
+
 impl ViewUniform {
     pub fn new() -> Self {
         // X Range
@@ -64,11 +66,13 @@ impl ViewUniform {
         }
     }
 
-    pub fn update(&mut self, min: (f32, f32), max: (f32, f32)) {
+    pub fn update(&mut self, min: Pos2, max: Pos2) {
+        /*
         println!(
             "N a: ({:.2}|{:.2}) b: ({:.2}|{:.2})",
             min.0, min.1, max.0, max.1
         );
+         */
 
         self.min_x = min.0;
         self.min_y = min.1;
@@ -76,7 +80,22 @@ impl ViewUniform {
         self.max_y = max.1;
     }
 
-    pub fn cutout_to_range(&self, min: (f32, f32), max: (f32, f32)) -> ((f32, f32), (f32, f32)) {
+    /// Returns ( (x_min, y_min), (x_max, y_max))
+    pub fn corners(&self) -> (Pos2, Pos2) {
+        ((self.min_x, self.min_y), (self.max_x, self.max_y))
+    }
+
+    /// Returns ( (x_min, x_max), (y_min, y_max))
+    pub fn range(&self) -> (Pos2, Pos2) {
+        ((self.min_x, self.max_x), (self.min_y, self.max_y))
+    }
+
+    /// Returns (xRange Size, yRange Size)
+    pub fn range_sizes(&self) -> (f32, f32) {
+        (self.max_x - self.min_x, self.max_y - self.min_y)
+    }
+
+    pub fn cutout_to_range(&self, min: Pos2, max: Pos2) -> (Pos2, Pos2) {
         let (x_min, x_max) = (self.min_x, self.max_x);
         let (y_min, y_max) = (self.min_y, self.max_y);
 
@@ -291,30 +310,41 @@ impl State {
     }
 
     pub fn resize(&mut self, new_size: winit::dpi::PhysicalSize<u32>) {
-        if new_size.width > 0 && new_size.height > 0 {
-            let scale = (
-                new_size.width as f32 / self.size.width as f32,
-                new_size.height as f32 / self.size.height as f32,
-            );
-
-            let diff = (scale.0 - 1., scale.1 - 1.);
-            // offset
-            let new_min = (-diff.0 / 2., -diff.1 / 2.);
-            let new_max = (1. + (diff.0 / 2.), 1. + (diff.1 / 2.));
-            //project
-            let new_min = self.project_cords(new_min);
-            let new_max = self.project_cords(new_max);
-
-            self.view.uniform.update(new_min, new_max);
-
-            self.size = new_size;
-            self.config.width = new_size.width;
-            self.config.height = new_size.height;
-            self.surface.configure(&self.device, &self.config);
+        if new_size.width <= 0 || new_size.height <= 0 {
+            return;
         }
+
+        // exp. (0.9, 1.1)
+        let scale = (
+            new_size.width as f32 / self.size.width as f32,
+            new_size.height as f32 / self.size.height as f32,
+        );
+
+        // Calculate new coordinate ranges
+        let range_sizes = self.view.uniform.range_sizes();
+        // Scale coordinate ranges according to the resizing of the window
+        let new_range_sizes = (range_sizes.0 * scale.0, range_sizes.1 * scale.1);
+        // The removed or added amount of coordinates
+        let range_diffs = (
+            range_sizes.0 - new_range_sizes.0,
+            range_sizes.1 - new_range_sizes.1,
+        );
+
+        let (old_a, old_b) = self.view.uniform.corners();
+        // "range_diffs.0 / 2" to keep the figure centered
+        let new_a = (old_a.0 + range_diffs.0 / 2., old_a.1 + range_diffs.1 / 2.);
+        let new_b = (old_b.0 - range_diffs.0 / 2., old_b.1 - range_diffs.1 / 2.);
+
+        self.view.uniform.update(new_a, new_b);
+
+        // Resize window
+        self.size = new_size;
+        self.config.width = new_size.width;
+        self.config.height = new_size.height;
+        self.surface.configure(&self.device, &self.config);
     }
 
-    fn project_cords(&self, pos: (f32, f32)) -> (f32, f32) {
+    fn project_cords(&self, pos: Pos2) -> Pos2 {
         // Ranges from 0-1
         let x_size = self.view.uniform.max_x - self.view.uniform.min_x;
         let y_size = self.view.uniform.max_y - self.view.uniform.min_y;
