@@ -22,7 +22,9 @@ struct State {
 
 #[derive(Debug)]
 struct View {
-    cursor_pos: PhysicalPosition<f64>,
+    mouse_pos: PhysicalPosition<f64>,
+    mouse_delta: (f64, f64),
+    mouse_pressed: bool,
     uniform: ViewUniform,
     buffer: wgpu::Buffer,
     bind_group: wgpu::BindGroup,
@@ -85,9 +87,11 @@ impl ViewUniform {
         ((self.min_x, self.min_y), (self.max_x, self.max_y))
     }
 
-    /// Returns ( (x_min, x_max), (y_min, y_max))
-    pub fn range(&self) -> (Pos2, Pos2) {
-        ((self.min_x, self.max_x), (self.min_y, self.max_y))
+    pub fn translate(&mut self, vec: Pos2) {
+        let new_a = (self.min_x + vec.0, self.min_y + vec.1);
+        let new_b = (self.max_x + vec.0, self.max_y + vec.1);
+
+        self.update(new_a, new_b);
     }
 
     /// Returns (xRange Size, yRange Size)
@@ -297,7 +301,9 @@ impl State {
             size,
             render_pipeline,
             view: View {
-                cursor_pos: PhysicalPosition::new(0., 0.),
+                mouse_pos: PhysicalPosition::new(0., 0.),
+                mouse_delta: (0., 0.),
+                mouse_pressed: false,
                 uniform: view_uniform,
                 buffer: view_buffer,
                 bind_group: view_bind_group,
@@ -320,14 +326,14 @@ impl State {
             new_size.height as f32 / self.size.height as f32,
         );
 
+        let old_range_sizes = self.view.uniform.range_sizes();
         // Calculate new coordinate ranges
-        let range_sizes = self.view.uniform.range_sizes();
         // Scale coordinate ranges according to the resizing of the window
-        let new_range_sizes = (range_sizes.0 * scale.0, range_sizes.1 * scale.1);
+        let new_range_sizes = (old_range_sizes.0 * scale.0, old_range_sizes.1 * scale.1);
         // The removed or added amount of coordinates
         let range_diffs = (
-            range_sizes.0 - new_range_sizes.0,
-            range_sizes.1 - new_range_sizes.1,
+            old_range_sizes.0 - new_range_sizes.0,
+            old_range_sizes.1 - new_range_sizes.1,
         );
 
         let (old_a, old_b) = self.view.uniform.corners();
@@ -357,7 +363,6 @@ impl State {
         return proj;
     }
 
-    #[allow(dead_code)]
     fn input(&mut self, event: &WindowEvent) -> bool {
         match event {
             WindowEvent::KeyboardInput { input, .. } => {
@@ -373,7 +378,38 @@ impl State {
                 }
             }
             WindowEvent::CursorMoved { position, .. } => {
-                self.view.cursor_pos = position.clone();
+                let new_pos = position.clone();
+                let delta = (
+                    position.x - self.view.mouse_pos.x,
+                    position.y - self.view.mouse_pos.y,
+                );
+                self.view.mouse_delta = delta;
+                self.view.mouse_pos = new_pos;
+
+                if self.view.mouse_pressed {
+                    let logical_delta = (
+                        delta.0 as f32 / self.size.width as f32,
+                        delta.1 as f32 / self.size.height as f32,
+                    );
+
+                    let range_sizes = self.view.uniform.range_sizes();
+                    let scaled_delta = (
+                        -logical_delta.0 * range_sizes.0, //Negative because otherwise it's inverted
+                        logical_delta.1 * range_sizes.1,
+                    );
+
+                    self.view.uniform.translate(scaled_delta);
+                }
+            }
+            WindowEvent::MouseInput { state, button, .. } => {
+                // Drag canvas
+                match button {
+                    MouseButton::Left => match state {
+                        ElementState::Pressed => self.view.mouse_pressed = true,
+                        ElementState::Released => self.view.mouse_pressed = false,
+                    },
+                    _ => {}
+                }
             }
             WindowEvent::MouseWheel { delta, .. } => match delta {
                 MouseScrollDelta::PixelDelta(_delta) => {
@@ -383,7 +419,7 @@ impl State {
                     //println!("{y}");
                     let fact = (y * 0.02) + 1.;
 
-                    let m_pos = self.view.cursor_pos;
+                    let m_pos = self.view.mouse_pos;
                     let m_pos = (
                         m_pos.x as f32 / self.size.width as f32,
                         m_pos.y as f32 / self.size.height as f32,
