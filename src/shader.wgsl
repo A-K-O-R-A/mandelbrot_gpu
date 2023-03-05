@@ -74,15 +74,121 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
 
     let iter: u32 = mandelbrot(uv);
 
-    let p: f32 = 1. / (pow(f32(iter), 0.27) + 1.);
-    
-    let col = vec3<f32>(p, .1 , .1);
+    //let p: f32 = 1. / (pow(f32(iter), 0.7) + 1.);
+    //let col = vec3<f32>(p, p, p);
+
+    //let col = exponential_cyclic_coloring(iter);
+    if (iter == view.max_iterations) {
+        return vec4<f32>(0.0, 0.0, 0.0, 1.0);
+    } else {
+        let col = LCH_coloring(iter);
+        return vec4<f32>(col.xyz, 1.0);
+    }
+
 
     //let col = (in.vert_pos + vec3<f32>(1.0,1.0,1.0)) / 2.0;
-
-    return vec4<f32>(col.xyz, 1.0);
 }
 
+
+
+fn exponential_cyclic_coloring(iter: u32) -> vec3<f32> {
+    let N = 1.0;
+    let s = f32(iter) / f32(view.max_iterations);
+
+
+    let v = pow(
+                pow(s,0.7),
+                1.5
+            ) % N ;
+
+    let col = vec3<f32>(v,v,v);
+
+    return col;
+}
+
+const PI: f32 = 3.14159;
+fn LCH_coloring(iter: u32) -> vec3<f32> {
+    let N = 360.0;
+    let s = f32(iter) / f32(view.max_iterations);
+
+    let v = 1.0 - pow(cos(PI * s), 2.0);
+    let LCH = vec3<f32>(
+        75.0 - (75.0 * v),
+        28.0 + (75.0 - (75.0 * v)),
+        pow(360.0 * s, 1.5) % 360.0
+    );
+    //let col = vec3<f32>(p, p, p);
+
+    return //xyz_to_rgb(
+        lab_to_xyz(
+            lch_to_lab(LCH)
+        )
+    ;//);
+}
+
+// http://www.brucelindbloom.com/index.html?Eqn_LCH_to_Lab.html
+fn lch_to_lab(lch: vec3<f32>) -> vec3<f32> {
+    let l = lch.x;
+    let a = lch.y * cos(radians(lch.z));
+    let b = lch.y * sin(radians(lch.z));
+
+    return vec3<f32>(l,a,b);
+}
+
+// http://www.brucelindbloom.com/index.html?Eqn_Lab_to_XYZ.html
+const REF_WHITE = vec3<f32>(1.0, 1.0, 1.0);
+fn lab_to_xyz(lab: vec3<f32>) -> vec3<f32> {
+    let l = lab.x;
+    let a = lab.y;
+    let b = lab.z;
+
+    let e = 0.008856;
+    let k = 903.3;
+
+    // the f's
+    let f_y = (l + 16.0) / 116.0;
+    let f_x = (a / 500.0) + f_y;
+    let f_z = f_y - (b / 200.0);
+
+    var x_r: f32 = 0.0;
+    if (pow(f_x, 3.0) > e) {
+        x_r = pow(f_x, 3.0);
+    } else {
+        x_r = ((116.0 * f_x) - 16.0) / k;
+    }
+
+    var y_r: f32 = 0.0;
+    if (l > k*e) {
+        y_r = pow(((l + 16.0) - 116.0), 3.0);
+    } else {
+        y_r = l / k;
+    }
+
+    var z_r: f32 = 0.0;
+    if (pow(f_z, 3.0) > e) {
+        z_r = pow(f_x, 3.0);
+    } else {
+        z_r = ((116.0 * f_z) - 16.0) / k;
+    }
+    
+
+    return vec3<f32>(x_r, y_r, z_r) * REF_WHITE;
+}
+
+// http://www.brucelindbloom.com/index.html?Eqn_XYZ_to_RGB.html
+const M =  mat3x3<f32>(
+    vec3<f32>(3.2404542,   -1.5371385,  -0.4985314),
+    vec3<f32>(-0.9692660,   1.8760108,   0.0415560),
+    vec3<f32>(0.0556434,   -0.2040259,   1.0572252)
+);
+fn xyz_to_rgb(xyz: vec3<f32>) -> vec3<f32> {
+    let rgb = M * xyz;
+
+    return rgb;
+}
+
+
+// Actual computation
 
 fn project_cords(pos: vec2<f32>) -> vec2<f32> {
     // Ranges from 0-1
