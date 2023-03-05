@@ -328,7 +328,7 @@ impl State {
                     // Change iterations
                     VirtualKeyCode::Comma => {
                         if self.view.uniform.max_iterations > 100 {
-                            self.view.uniform.max_iterations -= 10;
+                            self.view.uniform.max_iterations -= 100;
                         }
                     }
                     VirtualKeyCode::Period => {
