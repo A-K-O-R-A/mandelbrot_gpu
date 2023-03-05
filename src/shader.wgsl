@@ -70,26 +70,47 @@ var<uniform> view: ViewUniform;
 
 @fragment
 fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
+    // Logical coordinates on screen
     let uv: vec2<f32> = in.vert_pos.xy;
 
-    let iter: u32 = mandelbrot(uv);
+    // Coordinates for the mandelbrot set
+    let p0   = project_cords(uv);
+    // Iteration count of escape time algorithm
+    var raw_iter = mandelbrot(p0);
+
+    // Skip black areas entirely
+    if (raw_iter == view.max_iterations) {
+        return vec4<f32>(0.0, 0.0, 0.0, 1.0);
+    }
+
+    //Smooth coloring - https://en.wikipedia.org/wiki/Plotting_algorithms_for_the_Mandelbrot_set#Continuous_(smooth)_coloring
+    let log_zn = sqrt(dot(p0, p0)) / 2.0;
+    let nu = sqrt(log_zn / sqrt(2.0)) / sqrt(2.0);
+    // Rearranging the potential function.
+    // Dividing log_zn by log(2) instead of log(N = 1<<8)
+    // because we want the entire palette to range from the
+    // center to radius 2, NOT our bailout radius.
+    let iter = f32(raw_iter) + 1.0 - nu;
+    //let iter = raw_iter;
 
     //let p: f32 = 1. / (pow(f32(iter), 0.7) + 1.);
     //let col = vec3<f32>(p, p, p);
+    let iter_u = u32(floor(iter));
 
-    //let col = exponential_cyclic_coloring(iter);
-    if (iter == view.max_iterations) {
-        return vec4<f32>(0.0, 0.0, 0.0, 1.0);
-    } else {
-        let col = LCH_coloring(iter);
-        return vec4<f32>(col.xyz, 1.0);
-    }
-
-
-    //let col = (in.vert_pos + vec3<f32>(1.0,1.0,1.0)) / 2.0;
+    let col1 = exponential_cyclic_coloring(iter_u);
+    let col2 = exponential_cyclic_coloring(iter_u + 1u);
+    let col = lerp(col1, col2, nu);
+    //let col = LCH_coloring(iter);
+    
+    return vec4<f32>(col.xyz, 1.0);    
 }
 
+// Linear interpolation
+fn lerp(a: vec3<f32>, b: vec3<f32>, f: f32) -> vec3<f32> {
+    let v = b - a; //Vec from a to b
 
+    return a + (b * f);
+}
 
 fn exponential_cyclic_coloring(iter: u32) -> vec3<f32> {
     let N = 1.0;
@@ -205,9 +226,7 @@ fn project_cords(pos: vec2<f32>) -> vec2<f32> {
     return proj;
 }
 
-fn mandelbrot(pos: vec2<f32>) -> u32 {
-    let p0: vec2<f32> = project_cords(pos);
-
+fn mandelbrot(p0: vec2<f32>) -> u32 {
     var p: vec2<f32> = vec2<f32>(0.0, 0.0);
     var iteration: u32 = 0u;
 
