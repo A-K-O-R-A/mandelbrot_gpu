@@ -35,7 +35,7 @@ struct View {
 // This is so we can store this in a buffer
 #[derive(Debug, Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
 struct ViewUniform {
-    dpi: f32,
+    color_factor: f32,
     radius: f32,
     max_iterations: u32,
     // Bottom left corner
@@ -56,7 +56,7 @@ impl ViewUniform {
         let y_r = [-1.12, 1.12];
 
         Self {
-            dpi: 500.,
+            color_factor: 50.,
             radius: 2.,
             max_iterations: 500,
             min_x: x_r[0],
@@ -493,6 +493,7 @@ pub async fn run() {
     let event_loop = EventLoop::new();
     let window = WindowBuilder::new()
         .with_title("Mandelbrot renderer")
+        //.with_inner_size((500.0, 300.0))
         .build(&event_loop)
         .unwrap();
 

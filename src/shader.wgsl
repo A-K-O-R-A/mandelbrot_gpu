@@ -56,7 +56,7 @@ fn vs_main(
 
 // Fragment shader
 struct ViewUniform {
-    dpi: f32,
+    color_factor: f32,
     radius: f32,
     max_iterations: u32,
     x_min: f32,
@@ -76,31 +76,33 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     // Coordinates for the mandelbrot set
     let p0   = project_cords(uv);
     // Iteration count of escape time algorithm
-    var raw_iter = mandelbrot(p0);
+    let res = mandelbrot(p0);
+    let p   = res.yz;
+    var raw_iter = res.x;
+
 
     // Skip black areas entirely
-    if (raw_iter == view.max_iterations) {
+    if (raw_iter == f32(view.max_iterations)) {
         return vec4<f32>(0.0, 0.0, 0.0, 1.0);
     }
 
     //Smooth coloring - https://en.wikipedia.org/wiki/Plotting_algorithms_for_the_Mandelbrot_set#Continuous_(smooth)_coloring
-    let log_zn = sqrt(dot(p0, p0)) / 2.0;
-    let nu = sqrt(log_zn / sqrt(2.0)) / sqrt(2.0);
+    let log_zn = log(dot(p, p)) / 2.0;
+    let nu = log(log_zn / log(2.0)) / log(2.0);
     // Rearranging the potential function.
     // Dividing log_zn by log(2) instead of log(N = 1<<8)
     // because we want the entire palette to range from the
     // center to radius 2, NOT our bailout radius.
     let iter = f32(raw_iter) + 1.0 - nu;
-    //let iter = raw_iter;
 
     //let p: f32 = 1. / (pow(f32(iter), 0.7) + 1.);
-    //let col = vec3<f32>(p, p, p);
     let iter_u = u32(floor(iter));
 
-    let col1 = exponential_cyclic_coloring(iter_u);
-    let col2 = exponential_cyclic_coloring(iter_u + 1u);
-    let col = lerp(col1, col2, nu);
-    //let col = LCH_coloring(iter);
+    //let col1 = hsvToRgb(vec3<f32>(f32(iter_u) % 1.9, 1.0, 1.0));
+    //let col2 = hsvToRgb(vec3<f32>(f32(iter_u + 1u) % 1.0, 1.0, 1.0));
+    //let col2 = hsvToRgb(iter_u + 1u);
+    //let col = lerp(col1, col2, iter % 1.0);
+    let col = hsvToRgb(vec3<f32>(iter / 50.0 % 1.0, 1.0, 1.0));
     
     return vec4<f32>(col.xyz, 1.0);    
 }
@@ -208,6 +210,55 @@ fn xyz_to_rgb(xyz: vec3<f32>) -> vec3<f32> {
     return rgb;
 }
 
+// https://stackoverflow.com/questions/51203917/math-behind-hsv-to-rgb-conversion-of-colors
+fn hsvToRgb(hsv: vec3<f32>) -> vec3<f32> {
+    var rgb = vec3<f32>(0.0, 0.0, 0.0);
+
+    let h = hsv.x;
+    let s = hsv.y;
+    let v = hsv.z;
+
+    let i = floor(h * 6.0);
+    let f = h * 6.0 - i;
+    let p = v * (1.0 - s);
+    let q = v * (1.0 - f * s);
+    let t = v * (1.0 - (1.0 - f) * s);
+
+    var r = 0.0;
+    var g = 0.0;
+    var b = 0.0;
+
+    let m = u32(i % 6.0);
+    
+    if (m == 0u) {
+        r = v;
+        g = t;
+        b = p;
+    } else if (m == 1u) {
+        r = q;
+        g = v;
+        b = p;
+    } else if (m == 2u) {
+        r = p;
+        g = v;
+        b = t;
+    } else if (m == 3u) {
+        r = p;
+        g = q;
+        b = v;
+    } else if (m == 4u) {
+        r = t;
+        g = p;
+        b = v;
+    } else if (m == 5u) {
+        r = v;
+        g = p;
+        b = q;
+    }
+    
+
+    return vec3<f32>(r, g, b);
+}
 
 // Actual computation
 
@@ -226,7 +277,8 @@ fn project_cords(pos: vec2<f32>) -> vec2<f32> {
     return proj;
 }
 
-fn mandelbrot(p0: vec2<f32>) -> u32 {
+// Returns (iter, x , y)
+fn mandelbrot(p0: vec2<f32>) -> vec3<f32> {
     var p: vec2<f32> = vec2<f32>(0.0, 0.0);
     var iteration: u32 = 0u;
 
@@ -239,6 +291,6 @@ fn mandelbrot(p0: vec2<f32>) -> u32 {
         iteration += 1u;
     }
         
-    return iteration;
+    return vec3<f32>(f32(iteration), p);
 }
  
