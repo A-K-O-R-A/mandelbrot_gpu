@@ -102,7 +102,7 @@ fn fs_main(in: VertexOutput) -> @location(0) vec4<f32> {
     //let col2 = hsvToRgb(vec3<f32>(f32(iter_u + 1u) % 1.0, 1.0, 1.0));
     //let col2 = hsvToRgb(iter_u + 1u);
     //let col = lerp(col1, col2, iter % 1.0);
-    let col = hsvToRgb(vec3<f32>(iter / 50.0 % 1.0, 1.0, 1.0));
+    let col = hsvToRgb(vec3<f32>(iter / view.color_factor % 1.0, 1.0, 1.0));
     
     return vec4<f32>(col.xyz, 1.0);    
 }

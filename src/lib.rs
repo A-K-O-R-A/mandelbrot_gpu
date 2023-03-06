@@ -347,6 +347,17 @@ impl State {
                             self.view.uniform.radius += 0.1;
                         }
                     }
+                    // Change coloring
+                    VirtualKeyCode::O => {
+                        if self.view.uniform.color_factor > 1.0 {
+                            self.view.uniform.color_factor -= 1.0;
+                        }
+                    }
+                    VirtualKeyCode::P => {
+                        if self.view.uniform.color_factor < 1000000.0 {
+                            self.view.uniform.color_factor += 1.0;
+                        }
+                    }
                     // Move
                     VirtualKeyCode::Left | VirtualKeyCode::A => {
                         self.view.uniform.translate((-range_sizes.0 * SPEED, 0.))
@@ -481,6 +492,8 @@ pub async fn run() {
     
     , - decrease Iterations (-100)        K - decrease Radius (-0.1)
     . - increase Iterations (+100)        L - increase Radius (+0.1)
+    O - decrease coloring factor (-1)
+    P - increase coloring factor (+1)
 
     You can move with W/A/S/D, the arrow keys or by dragging with the mouse.
 
